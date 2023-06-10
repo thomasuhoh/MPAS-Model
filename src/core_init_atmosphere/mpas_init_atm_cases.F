@@ -2652,6 +2652,10 @@ module init_atm_cases
 
       integer :: nfglevels_actual
       integer, pointer :: index_qv
+      integer, pointer :: index_qi
+      integer, pointer :: index_qc
+      integer, pointer :: index_qr
+      integer, pointer :: index_qs
 
       integer, dimension(5) :: interp_list
       real (kind=RKIND) :: maskval
@@ -2775,6 +2779,14 @@ module init_atm_cases
       real (kind=RKIND), dimension(:,:), pointer :: st_fg
       real (kind=RKIND), dimension(:,:), pointer :: sm_fg
       real (kind=RKIND), dimension(:), pointer :: soilz
+      real (kind=RKIND), dimension(:,:), pointer :: qi_fg
+      real (kind=RKIND), dimension(:,:), pointer :: qc_fg
+      real (kind=RKIND), dimension(:,:), pointer :: qr_fg
+      real (kind=RKIND), dimension(:,:), pointer :: qs_fg
+      real (kind=RKIND), dimension(:,:), pointer :: qice
+      real (kind=RKIND), dimension(:,:), pointer :: qcloud
+      real (kind=RKIND), dimension(:,:), pointer :: qsnow
+      real (kind=RKIND), dimension(:,:), pointer :: qrain
 
       type (hashtable), allocatable :: level_hash
       logical :: too_many_fg_levs
@@ -2863,6 +2875,10 @@ module init_atm_cases
       call mpas_pool_get_array(diag, 'surface_pressure', surface_pressure)
       call mpas_pool_get_array(diag, 'relhum', relhum)
       call mpas_pool_get_array(diag, 'spechum', spechum)
+      call mpas_pool_get_array(diag, 'qcloud', qcloud)
+      call mpas_pool_get_array(diag, 'qice', qice)
+      call mpas_pool_get_array(diag, 'qsnow', qsnow)
+      call mpas_pool_get_array(diag, 'qrain', qrain)
       call mpas_pool_get_array(diag, 'ru', ru)
       call mpas_pool_get_array(diag, 'rw', rw)
 
@@ -2910,12 +2926,20 @@ module init_atm_cases
       call mpas_pool_get_array(fg, 'sh', sh_fg)
       call mpas_pool_get_array(fg, 'gfs_z', gfs_z)
       call mpas_pool_get_array(fg, 'p', p_fg)
+      call mpas_pool_get_array(fg, 'qice1', qi_fg)
+      call mpas_pool_get_array(fg, 'qcloud1', qc_fg)
+      call mpas_pool_get_array(fg, 'qrain1', qr_fg)
+      call mpas_pool_get_array(fg, 'qsnow1', qs_fg)
 
       call mpas_pool_get_dimension(dims, 'nVertLevels', nz1)
       call mpas_pool_get_dimension(dims, 'nCellsSolve', nCellsSolve)
       nz = nz1 + 1
 
       call mpas_pool_get_dimension(state, 'index_qv', index_qv)
+      call mpas_pool_get_dimension(state, 'index_qi', index_qi)
+      call mpas_pool_get_dimension(state, 'index_qc', index_qc)
+      call mpas_pool_get_dimension(state, 'index_qr', index_qr)
+      call mpas_pool_get_dimension(state, 'index_qs', index_qs)
 
       xnutr = 0.
       zd = 12000.
@@ -3491,6 +3515,10 @@ module init_atm_cases
              trim(field % field) == 'PRESSURE' .or. &
              trim(field % field) == 'SNOW' .or. &
              trim(field % field) == 'SEAICE' .or. &
+             trim(field % field) == 'QC' .or. &
+             trim(field % field) == 'QI' .or. &
+             trim(field % field) == 'QS' .or. &
+             trim(field % field) == 'QR' .or. &
              trim(field % field) == 'SKINTEMP') then
 
             if (trim(field % field) == 'SM000010' .or. &
@@ -3640,6 +3668,34 @@ module init_atm_cases
                latPoints => latCell
                lonPoints => lonCell
                call mpas_pool_get_array(fg, 'sh', destField2d)
+               ndims = 2
+           else if (trim(field % field) == 'QC') then
+               call mpas_log_write('Interpolating QC at $i $r', intArgs=(/k/), realArgs=(/vert_level(k)/))
+               nInterpPoints = nCells
+               latPoints => latCell
+               lonPoints => lonCell
+               call mpas_pool_get_array(fg, 'qcloud1', destField2d)
+               ndims = 2
+           else if (trim(field % field) == 'QI') then
+               call mpas_log_write('Interpolating QI at $i $r', intArgs=(/k/), realArgs=(/vert_level(k)/))
+               nInterpPoints = nCells
+               latPoints => latCell
+               lonPoints => lonCell
+               call mpas_pool_get_array(fg, 'qice1', destField2d)
+               ndims = 2
+           else if (trim(field % field) == 'QR') then
+               call mpas_log_write('Interpolating QR at $i $r', intArgs=(/k/), realArgs=(/vert_level(k)/))
+               nInterpPoints = nCells
+               latPoints => latCell
+               lonPoints => lonCell
+               call mpas_pool_get_array(fg, 'qrain1', destField2d)
+               ndims = 2
+           else if (trim(field % field) == 'QS') then
+               call mpas_log_write('Interpolating QS at $i $r', intArgs=(/k/), realArgs=(/vert_level(k)/))
+               nInterpPoints = nCells
+               latPoints => latCell
+               lonPoints => lonCell
+               call mpas_pool_get_array(fg, 'qsnow1', destField2d)
                ndims = 2
             else if (trim(field % field) == 'GHT') then
                call mpas_log_write('Interpolating GHT at $i $r', intArgs=(/k/), realArgs=(/vert_level(k)/))
@@ -4644,6 +4700,69 @@ call mpas_log_write('Done with soil consistency check')
                                         sorted_arr(:,1:nfglevels_actual-1), order=1, extrap=0)
          end do
 
+         ! QC: if first-guess values are negative, set those values to zero before
+         ! vertical interpolation.
+         sorted_arr(:,:) = -999.0
+         qcloud(:,iCell) = 0._RKIND
+         do k = 1, nfglevels_actual
+            sorted_arr(1,k) = z_fg(k,iCell)
+            if (vert_level(k) == 200100.0) sorted_arr(1,k) = 99999.0
+            sorted_arr(2,k) = max(0._RKIND,qc_fg(k,iCell))
+         end do
+         call mpas_quicksort(nfglevels_actual, sorted_arr)
+         do k = nVertLevels, 1, -1
+            target_z = 0.5 * (zgrid(k,iCell) + zgrid(k+1,iCell))
+            qcloud(k,iCell) = vertical_interp(target_z, nfglevels_actual-1, &
+                                        sorted_arr(:,1:nfglevels_actual-1), order=1, extrap=0)
+         end do
+
+         ! QI: if first-guess values are negative, set those values to zero before
+         ! vertical interpolation.
+         sorted_arr(:,:) = -999.0
+         qice(:,iCell) = 0._RKIND
+         do k = 1, nfglevels_actual
+            sorted_arr(1,k) = z_fg(k,iCell)
+            if (vert_level(k) == 200100.0) sorted_arr(1,k) = 99999.0
+            sorted_arr(2,k) = max(0._RKIND,qi_fg(k,iCell))
+         end do
+         call mpas_quicksort(nfglevels_actual, sorted_arr)
+         do k = nVertLevels, 1, -1
+            target_z = 0.5 * (zgrid(k,iCell) + zgrid(k+1,iCell))
+            qice(k,iCell) = vertical_interp(target_z, nfglevels_actual-1, &
+                                        sorted_arr(:,1:nfglevels_actual-1), order=1, extrap=0)
+         end do
+
+         ! QR: if first-guess values are negative, set those values to zero before
+         ! vertical interpolation.
+         sorted_arr(:,:) = -999.0
+         qrain(:,iCell) = 0._RKIND
+         do k = 1, nfglevels_actual
+            sorted_arr(1,k) = z_fg(k,iCell)
+            if (vert_level(k) == 200100.0) sorted_arr(1,k) = 99999.0
+            sorted_arr(2,k) = max(0._RKIND,qr_fg(k,iCell))
+         end do
+         call mpas_quicksort(nfglevels_actual, sorted_arr)
+         do k = nVertLevels, 1, -1
+            target_z = 0.5 * (zgrid(k,iCell) + zgrid(k+1,iCell))
+            qrain(k,iCell) = vertical_interp(target_z, nfglevels_actual-1, &
+                                        sorted_arr(:,1:nfglevels_actual-1), order=1, extrap=0)
+         end do
+
+         ! QS: if first-guess values are negative, set those values to zero before
+         ! vertical interpolation.
+         sorted_arr(:,:) = -999.0
+         qsnow(:,iCell) = 0._RKIND
+         do k = 1, nfglevels_actual
+            sorted_arr(1,k) = z_fg(k,iCell)
+            if (vert_level(k) == 200100.0) sorted_arr(1,k) = 99999.0
+            sorted_arr(2,k) = max(0._RKIND,qs_fg(k,iCell))
+         end do
+         call mpas_quicksort(nfglevels_actual, sorted_arr)
+         do k = nVertLevels, 1, -1
+            target_z = 0.5 * (zgrid(k,iCell) + zgrid(k+1,iCell))
+            qsnow(k,iCell) = vertical_interp(target_z, nfglevels_actual-1, &
+                                        sorted_arr(:,1:nfglevels_actual-1), order=1, extrap=0)
+         end do
 
          ! GHT
          sorted_arr(:,:) = -999.0
@@ -4785,6 +4904,10 @@ call mpas_log_write('Done with soil consistency check')
          do k = 1, nVertLevels
             do iCell = 1, nCells
                scalars(index_qv,k,iCell) = spechum(k,iCell)/(1._RKIND-spechum(k,iCell))
+               scalars(index_qc,k,iCell) = qcloud(k,iCell)/(1._RKIND-qcloud(k,iCell))
+               scalars(index_qi,k,iCell) = qice(k,iCell)/(1._RKIND-qice(k,iCell))
+               scalars(index_qr,k,iCell) = qrain(k,iCell)/(1._RKIND-qrain(k,iCell))
+               scalars(index_qs,k,iCell) = qsnow(k,iCell)/(1._RKIND-qsnow(k,iCell))
             enddo
          enddo
       endif

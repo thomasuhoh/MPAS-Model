@@ -955,6 +955,12 @@
 
                         <var name="qr" array_group="moist" units="kg kg^{-1}"
                              description="Rain water mixing ratio"/>
+
+                        <var name="qi" array_group="moist" units="kg kg^{-1}"
+                             description="Cloud ice mixing ratio"/>
+
+                        <var name="qs" array_group="moist" units="kg kg^{-1}"
+                             description="snow mixing ratio"/>
                 </var_array>
 
                 <!-- Climatology for ocean mixed-layer depth -->
@@ -1055,6 +1061,18 @@
                 <var name="sm_fg" type="real" dimensions="nFGSoilLevels nCells Time" units="m^{3} m^{-3}"
                      description="First guess soil moisture"
                      packages="first_guess_field"/>
+
+                <var name="qi_fg" name_in_code="qice1" type="real" dimensions="nFGLevels nCells Time" units="kg kg^{-1}"
+                     description="First guess cloud ice"/>
+
+                <var name="qc_fg" name_in_code="qcloud1" type="real" dimensions="nFGLevels nCells Time" units="kg kg^{-1}"
+                     description="First guess cloud water"/>
+
+		<var name="qr_fg" name_in_code="qrain1" type="real" dimensions="nFGLevels nCells Time" units="kg kg^{-1}"
+                     description="First guess rain water"/>
+
+                <var name="qs_fg" name_in_code="qsnow1" type="real" dimensions="nFGLevels nCells Time" units="kg kg^{-1}"
+                     description="First guess snow"/>
 
                 <!-- horizontally interpolated from first-guess data, and should be read in by model -->
                 <var name="dz" type="real" dimensions="nSoilLevels nCells Time" units="m"
