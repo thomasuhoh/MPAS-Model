@@ -1063,16 +1063,16 @@
                      packages="first_guess_field"/>
 
                 <var name="qi_fg" name_in_code="qice1" type="real" dimensions="nFGLevels nCells Time" units="kg kg^{-1}"
-                     description="First guess cloud ice"/>
+                     description="First guess cloud ice mixing ratio"/>
 
                 <var name="qc_fg" name_in_code="qcloud1" type="real" dimensions="nFGLevels nCells Time" units="kg kg^{-1}"
-                     description="First guess cloud water"/>
+                     description="First guess cloud water mixing ratio"/>
 
 		<var name="qr_fg" name_in_code="qrain1" type="real" dimensions="nFGLevels nCells Time" units="kg kg^{-1}"
-                     description="First guess rain water"/>
+                     description="First guess rain water mixing ratio"/>
 
                 <var name="qs_fg" name_in_code="qsnow1" type="real" dimensions="nFGLevels nCells Time" units="kg kg^{-1}"
-                     description="First guess snow"/>
+                     description="First guess snow mixing ratio"/>
 
                 <!-- horizontally interpolated from first-guess data, and should be read in by model -->
                 <var name="dz" type="real" dimensions="nSoilLevels nCells Time" units="m"
